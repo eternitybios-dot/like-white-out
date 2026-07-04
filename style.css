@@ -152,6 +152,19 @@ body[data-weather="freeze"] #blizzard { opacity: .18; animation-duration: 3s; }
 .weather-info.w-storm { color: #9fc4ee; border-color: #3d6396; }
 .weather-info.w-freeze { color: #b7d8ff; border-color: #4a76b4; }
 
+.sound-toggle {
+  flex-shrink: 0;
+  width: 30px; height: 30px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px;
+  color: var(--ink-dim);
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: rgba(255,255,255,.03);
+}
+.sound-toggle:active { transform: scale(.92); }
+.sound-toggle.on { color: var(--ember); border-color: var(--ember-deep); }
+
 .threat-banner {
   margin-top: 5px;
   display: flex;

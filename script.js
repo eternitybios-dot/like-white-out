@@ -99,6 +99,206 @@ const FLAVOR_TENSE = [
   "鳥が一斉に飛び立った。何かがいる。",
 ];
 
+/* ============================================================
+   サウンドエンジン ─ Web Audio APIによる完全自前生成のBGM/SFX
+   外部音源ファイルを一切使わず、発振器とノイズだけで
+   和風・雪山の雰囲気を鳴らす。
+   ============================================================ */
+
+const SOUND_KEY = "hakurei-matagi-sound-v1";
+
+const Sound = (() => {
+  let ctx = null, master = null, musicGain = null, sfxGain = null;
+  let windSource = null, windGain = null;
+  let enabled = true;
+  try { const v = localStorage.getItem(SOUND_KEY); if (v !== null) enabled = v === "1"; } catch (e) { /* 保存不可環境は既定でON */ }
+
+  let schedulerId = null;
+  let nextNoteTime = 0;
+  let noteIndex = 0;
+  let currentPattern = null;
+  let currentTheme = null;
+  let stepSec = 0.85;
+  const LOOKAHEAD = 0.12;
+  const TICK_MS = 90;
+
+  // 陰旋法寄りの五音音階。昼は明るめ、夜は暗め、山の主は最も低く重い。
+  const SCALE = {
+    calm:  [261.63, 293.66, 311.13, 392.00, 440.00],
+    tense: [220.00, 233.08, 261.63, 293.66, 349.23],
+    boss:  [174.61, 196.00, 207.65, 246.94, 277.18],
+  };
+
+  function note(freq, t, dur, type, gain, dest) {
+    const osc = ctx.createOscillator();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, t);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(gain, t + 0.025);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    osc.connect(g).connect(dest || musicGain);
+    osc.start(t);
+    osc.stop(t + dur + 0.05);
+  }
+
+  function noiseBurst(t, dur, gain, dest) {
+    const buf = ctx.createBuffer(1, Math.max(1, Math.floor(ctx.sampleRate * dur)), ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / d.length);
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const filt = ctx.createBiquadFilter();
+    filt.type = "lowpass";
+    filt.frequency.value = 500;
+    const g = ctx.createGain();
+    g.gain.value = gain;
+    src.connect(filt).connect(g).connect(dest || sfxGain);
+    src.start(t);
+  }
+
+  function setupWind() {
+    const dur = 3;
+    const buf = ctx.createBuffer(1, ctx.sampleRate * dur, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    windSource = ctx.createBufferSource();
+    windSource.buffer = buf;
+    windSource.loop = true;
+    const filt = ctx.createBiquadFilter();
+    filt.type = "bandpass";
+    filt.frequency.value = 500;
+    filt.Q.value = 0.5;
+    windGain = ctx.createGain();
+    windGain.gain.value = 0.012;
+    windSource.connect(filt).connect(windGain).connect(musicGain);
+    windSource.start();
+  }
+
+  function rampWind(v) {
+    if (!windGain) return;
+    const t = ctx.currentTime;
+    windGain.gain.cancelScheduledValues(t);
+    windGain.gain.setValueAtTime(windGain.gain.value, t);
+    windGain.gain.linearRampToValueAtTime(v, t + 1.2);
+  }
+
+  /* ---- 曲パターン：各テーマは (時刻, ステップ番号) を受けて音を置く ---- */
+
+  function dayPattern(t, idx) {
+    const sc = SCALE.calm;
+    const steps = [0, -1, 2, -1, 1, 3, -1, 4, 2, -1, 0, -1];
+    const s = steps[idx % steps.length];
+    if (s >= 0) note(sc[s], t, stepSec * 1.6, "triangle", 0.05);
+    if (idx % 6 === 0) note(sc[0] / 2, t, stepSec * 6, "sine", 0.03);
+  }
+
+  function eveningPattern(t, idx) {
+    const sc = SCALE.calm;
+    const steps = [-1, 1, -1, 3, -1, 2, 0, -1];
+    const s = steps[idx % steps.length];
+    if (s >= 0) note(sc[s], t, stepSec * 1.4, "triangle", 0.045);
+    if (idx % 4 === 0) note(sc[1] / 2, t, stepSec * 4, "sine", 0.032);
+  }
+
+  function nightCalmPattern(t, idx) {
+    const sc = SCALE.tense;
+    const steps = [-1, -1, 0, -1, -1, 2, -1, -1, -1, 1, -1, -1];
+    const s = steps[idx % steps.length];
+    if (s >= 0) note(sc[s], t, stepSec * 1.3, "sine", 0.038);
+    if (idx % 8 === 0) note(sc[0] / 2, t, stepSec * 8, "sine", 0.04);
+  }
+
+  function nightTensePattern(t, idx) {
+    const sc = SCALE.tense;
+    const steps = [0, 1, 0, 2, 0, 1, 3, 2];
+    note(sc[steps[idx % steps.length]], t, stepSec * 0.8, "sawtooth", 0.04);
+    if (idx % 2 === 0) note(sc[0] / 2, t, stepSec * 1.6, "sine", 0.045);
+  }
+
+  function bossPattern(t, idx) {
+    const sc = SCALE.boss;
+    note(sc[0] / 2, t, 0.3, "sine", 0.08);
+    noiseBurst(t, 0.18, 0.05);
+    const stab = [0, 2, 3, 2][idx % 4];
+    note(sc[stab], t + stepSec * 0.5, stepSec * 0.5, "sawtooth", 0.055);
+  }
+
+  function setTheme(name) {
+    if (!ctx || currentTheme === name) return;
+    currentTheme = name;
+    noteIndex = 0;
+    nextNoteTime = ctx.currentTime + 0.05;
+    const table = {
+      day:         { pattern: dayPattern,        tempo: 0.9,  wind: 0.01 },
+      evening:     { pattern: eveningPattern,     tempo: 0.95, wind: 0.02 },
+      "night-calm":{ pattern: nightCalmPattern,   tempo: 1.05, wind: 0.03 },
+      "night-tense":{ pattern: nightTensePattern, tempo: 0.55, wind: 0.055 },
+      boss:        { pattern: bossPattern,        tempo: 0.42, wind: 0.09 },
+    };
+    const cfg = table[name];
+    if (!cfg) return;
+    currentPattern = cfg.pattern;
+    stepSec = cfg.tempo;
+    rampWind(cfg.wind);
+  }
+
+  function tick() {
+    if (!ctx || !currentPattern) return;
+    while (nextNoteTime < ctx.currentTime + LOOKAHEAD) {
+      currentPattern(nextNoteTime, noteIndex);
+      noteIndex++;
+      nextNoteTime += stepSec;
+    }
+  }
+
+  function init() {
+    if (ctx) { if (ctx.state === "suspended") ctx.resume(); return; }
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    try {
+      ctx = new AC();
+      master = ctx.createGain();
+      master.gain.value = enabled ? 0.55 : 0;
+      master.connect(ctx.destination);
+      musicGain = ctx.createGain(); musicGain.gain.value = 1; musicGain.connect(master);
+      sfxGain = ctx.createGain(); sfxGain.gain.value = 1; sfxGain.connect(master);
+      setupWind();
+      nextNoteTime = ctx.currentTime + 0.1;
+      schedulerId = setInterval(tick, TICK_MS);
+    } catch (e) { ctx = null; /* Web Audio非対応環境では静かに諦める */ }
+  }
+
+  function toggle() {
+    enabled = !enabled;
+    try { localStorage.setItem(SOUND_KEY, enabled ? "1" : "0"); } catch (e) { /* 無視 */ }
+    if (ctx && master) {
+      const t = ctx.currentTime;
+      master.gain.cancelScheduledValues(t);
+      master.gain.setValueAtTime(master.gain.value, t);
+      master.gain.linearRampToValueAtTime(enabled ? 0.55 : 0, t + 0.15);
+    }
+    return enabled;
+  }
+
+  const SFX = {
+    build(t) { [523.25, 659.25, 783.99].forEach((f, i) => note(f, t + i * 0.06, 0.35, "triangle", 0.09, sfxGain)); },
+    trapcatch(t) { note(1046.5, t, 0.15, "sine", 0.08, sfxGain); note(1318.5, t + 0.09, 0.22, "sine", 0.08, sfxGain); },
+    repel(t) { [392.0, 523.25, 659.25, 783.99].forEach((f, i) => note(f, t + i * 0.08, 0.32, "triangle", 0.09, sfxGain)); },
+    hit(t) { note(80, t, 0.4, "sine", 0.15, sfxGain); noiseBurst(t, 0.25, 0.12, sfxGain); },
+    victory(t) { [392.0, 493.88, 587.33, 783.99].forEach((f, i) => note(f, t + i * 0.14, 0.7, "triangle", 0.08, sfxGain)); },
+    defeat(t) { [392.0, 349.23, 293.66, 220.0].forEach((f, i) => note(f, t + i * 0.24, 0.55, "sine", 0.07, sfxGain)); },
+    bell(t) { note(880, t, 0.5, "sine", 0.045, sfxGain); },
+  };
+
+  function sfx(name) {
+    if (!ctx || !SFX[name]) return;
+    SFX[name](ctx.currentTime);
+  }
+
+  return { init, toggle, setTheme, sfx, isEnabled: () => enabled };
+})();
+
 /* ---------- 状態 ---------- */
 
 let S = null;          // ゲーム状態
@@ -239,8 +439,9 @@ let prevDay = null;
 
 function renderTop() {
   $("#dayInfo").textContent = `第${S.day}日`;
-  if (prevDay !== null && prevDay !== S.day) bumpEl($("#dayInfo"), "day-bump");
+  if (prevDay !== null && prevDay !== S.day) { bumpEl($("#dayInfo"), "day-bump"); Sound.sfx("bell"); }
   prevDay = S.day;
+  updateMusicState();
 
   const timeMap = { day: "☀ 昼", evening: "🌆 夕方", night: "🌙 夜" };
   $("#timeInfo").textContent = timeMap[S.time] || "☀ 昼";
@@ -259,6 +460,14 @@ function renderTop() {
   if (S.buildings.watchtower >= 1) txt += `（接近度 ${Math.round(S.threat)}）`;
   if (S.day === WIN_DAY) txt = "⚠ 今夜、山の主が来る";
   $("#threatText").textContent = txt;
+}
+
+/** 時間帯・接近度に応じてBGMのテーマを切り替える（山の主戦は別途明示的に切り替える）。 */
+function updateMusicState() {
+  if (S.over) return;
+  if (S.time === "night") Sound.setTheme(S.threat >= 45 ? "night-tense" : "night-calm");
+  else if (S.time === "evening") Sound.setTheme("evening");
+  else Sound.setTheme("day");
 }
 
 let prevResources = null;
@@ -614,6 +823,7 @@ function doBuild(id) {
   S.buildings[id] = lv + 1;
   addLog(`${def.name}を${lv === 0 ? "建てた" : `Lv${lv + 1}に強化した`}。`, "good");
   justBuiltId = id;
+  Sound.sfx("build");
   save();
   renderAll();
 }
@@ -1023,6 +1233,7 @@ function resolveNight(R) {
       L.push({ t: `毛皮 +${fur} ／ 食料 +${food}`, c: "good" });
       L.push({ t: "罠を1つ消費した", c: "warn" });
       addLog("罠に獲物がかかっていた。", "good");
+      Sound.sfx("trapcatch");
       page = {
         kicker: "夜明け前", title: "罠が仕事をした", emoji: "🪤", cls: "oc-good",
         html: `<p class="fl">罠に荒い毛が絡んでいた。獣は雪の上に伸びている。</p>${linesHtml(L)}`,
@@ -1038,6 +1249,8 @@ function resolveNight(R) {
       L.push({ t: `食料 -${foodLoss}`, c: "bad" });
       L.push({ t: "士気 -4 ／ 満足したのか、接近度 -10", c: "warn" });
       addLog("夜のうちに倉が荒らされた。", "danger");
+      Sound.setTheme("night-tense");
+      Sound.sfx("hit");
       page = {
         kicker: "夜", title: "倉庫荒らし", emoji: "🐻", cls: "oc-attack", beast: true,
         html: `<p class="fl">朝、倉の戸が裂かれていた。太い爪の痕が三本、深く。</p>${linesHtml(L)}`,
@@ -1092,6 +1305,7 @@ function bearAttack(R, isBoss) {
       "雪を蹴散らす音が、まっすぐ村へ向かってくる。",
     ]);
 
+  Sound.setTheme(isBoss ? "boss" : "night-tense");
   pages.push({
     kicker: isBoss ? "最後の夜" : "夜", title: isBoss ? "山の主" : "ヒグマ襲撃",
     emoji: isBoss ? "🐻‍❄️" : "🐻", cls: isBoss ? "oc-boss" : "oc-attack", beast: true,
@@ -1122,6 +1336,7 @@ function bearAttack(R, isBoss) {
       TL.push({ t: "罠はすべて跳ね飛ばされた…", c: "bad" });
     }
     TL.push({ t: `罠を${trapsUsed}つ消費した`, c: "warn" });
+    Sound.sfx(trapHits > 0 ? "trapcatch" : "hit");
     pages.push({
       kicker: "防衛", title: "罠の間合い", emoji: "🪤",
       cls: trapHits > 0 ? "oc-good flash-good" : "oc-attack",
@@ -1138,6 +1353,7 @@ function bearAttack(R, isBoss) {
     S.morale = clamp(S.morale + 8, 0, 100);
     gainExp(6, R);
     addLog("罠がヒグマを撃退した。", "good");
+    Sound.sfx("repel");
     pages.push({
       kicker: "夜明け", title: "撃退", emoji: "🏔", cls: "oc-good",
       html: `<p class="fl">血の点々が山へ続いている。今夜は、村の勝ちだ。</p>
@@ -1168,6 +1384,7 @@ function bearAttack(R, isBoss) {
     }
     gainExp(6, R);
     addLog("ヒグマの襲撃を撃退した！", "good");
+    Sound.sfx("repel");
     L.push({ t: `防衛力 ${def} が勢い ${power} を上回った`, c: "good" });
     L.push({ t: "士気 +10 ／ ヒグマ接近度 -30", c: "good" });
     if (fur > 0) L.push({ t: `毛皮 +${fur}`, c: "good" });
@@ -1201,6 +1418,7 @@ function bearAttack(R, isBoss) {
     }
     gainExp(3, R);
     addLog(`ヒグマに柵を破られた。被害 ${dmg}。`, "danger");
+    Sound.sfx("hit");
     pages.push({
       kicker: "夜", title: "柵が破られた", emoji: "💥", cls: "oc-attack",
       html: `<p class="fl">${deaths > 0 ? "雪が、赤い。誰も声を出せなかった。" : "牙と爪の嵐。夜明けと共に、獣はようやく山へ消えた。"}</p>${linesHtml(L)}`,
@@ -1241,6 +1459,8 @@ function endingStatsHtml() {
 
 function victoryPages() {
   addLog("三十日目の朝。村は、守り抜かれた。", "good");
+  Sound.setTheme("day");
+  Sound.sfx("victory");
   return [{
     kicker: "結末", title: "春を待つ村", emoji: "🌅", cls: "oc-boss",
     html: `
@@ -1261,6 +1481,7 @@ function defeatPages(reason) {
   };
   const t = texts[reason] || texts.hp;
   addLog("村は冬を越せなかった。", "danger");
+  Sound.sfx("defeat");
   return [{
     kicker: "結末", title: t.title, emoji: "🕯", cls: "oc-attack",
     html: `
@@ -1419,11 +1640,32 @@ function bindEvents() {
     save();
     renderHint();
   });
+
+  $("#soundToggle").addEventListener("click", () => {
+    Sound.init();
+    updateSoundIcon(Sound.toggle());
+    updateMusicState();
+  });
+}
+
+function updateSoundIcon(on) {
+  const btn = $("#soundToggle");
+  btn.textContent = on ? "🔊" : "🔇";
+  btn.classList.toggle("on", on);
+  btn.setAttribute("aria-label", on ? "音を消す" : "音を鳴らす");
 }
 
 function init() {
   initSnow();
   bindEvents();
+  updateSoundIcon(Sound.isEnabled());
+  const startAudioOnce = () => {
+    Sound.init();
+    updateMusicState();
+    document.removeEventListener("pointerdown", startAudioOnce);
+  };
+  document.addEventListener("pointerdown", startAudioOnce, { once: true });
+
   const loaded = load();
   if (loaded) {
     S = loaded;
