@@ -564,6 +564,16 @@ function hideOverlay() {
 }
 
 /** ページ列を順番に表示する。各ページ: {kicker,title,emoji,html,cls,btn} */
+/** 獣が画面奥から迫り出す3D演出。爪痕が交差する一瞬の間合いを表現する。 */
+function beastHtml(emoji) {
+  const claws = [
+    { r: -16, d: .48 },
+    { r: 8, d: .56 },
+    { r: -6, d: .64 },
+  ].map(c => `<div class="claw" style="rotate:${c.r}deg;animation-delay:${c.d}s"></div>`).join("");
+  return `<div class="ov-beast"><span class="beast-emoji">${emoji}</span>${claws}</div>`;
+}
+
 function playPages(pages, onDone) {
   let i = 0;
   const show = () => {
@@ -573,7 +583,7 @@ function playPages(pages, onDone) {
     showOverlay(`
       ${p.kicker ? `<div class="ov-kicker">${esc(p.kicker)}</div>` : ""}
       ${p.title ? `<div class="ov-title">${esc(p.title)}</div>` : ""}
-      ${p.emoji ? `<div class="ov-emoji">${p.emoji}</div>` : ""}
+      ${p.emoji ? (p.beast ? beastHtml(p.emoji) : `<div class="ov-emoji">${p.emoji}</div>`) : ""}
       <div class="ov-body">${p.html || ""}</div>
       <div class="ov-actions"><button class="btn btn-ember btn-wide" id="ovNext">${esc(btnLabel)}</button></div>
     `, p.cls);
@@ -1029,7 +1039,7 @@ function resolveNight(R) {
       L.push({ t: "士気 -4 ／ 満足したのか、接近度 -10", c: "warn" });
       addLog("夜のうちに倉が荒らされた。", "danger");
       page = {
-        kicker: "夜", title: "倉庫荒らし", emoji: "🐻", cls: "oc-attack",
+        kicker: "夜", title: "倉庫荒らし", emoji: "🐻", cls: "oc-attack", beast: true,
         html: `<p class="fl">朝、倉の戸が裂かれていた。太い爪の痕が三本、深く。</p>${linesHtml(L)}`,
       };
       break;
@@ -1084,7 +1094,7 @@ function bearAttack(R, isBoss) {
 
   pages.push({
     kicker: isBoss ? "最後の夜" : "夜", title: isBoss ? "山の主" : "ヒグマ襲撃",
-    emoji: isBoss ? "🐻‍❄️" : "🐻", cls: isBoss ? "oc-boss" : "oc-attack",
+    emoji: isBoss ? "🐻‍❄️" : "🐻", cls: isBoss ? "oc-boss" : "oc-attack", beast: true,
     html: `<p class="fl">${esc(approach)}</p><p style="text-align:center;color:var(--ink-faint);font-size:12px">襲撃の勢い：${power}</p>`,
     btn: "迎え撃つ",
   });

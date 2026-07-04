@@ -616,6 +616,7 @@ body[data-weather="freeze"] #blizzard { opacity: .18; animation-duration: 3s; }
   background: rgba(3,6,13,.82);
   backdrop-filter: blur(3px);
   animation: fadein .25s ease;
+  perspective: 900px;
 }
 .overlay-card {
   width: 100%;
@@ -640,12 +641,12 @@ body[data-weather="freeze"] #blizzard { opacity: .18; animation-duration: 3s; }
   animation: rise .3s ease, quake .5s ease .25s;
 }
 @keyframes quake {
-  0%,100% { transform: translateX(0); }
-  15% { transform: translate(-4px,2px); }
-  30% { transform: translate(4px,-2px); }
-  45% { transform: translate(-3px,-1px); }
-  60% { transform: translate(3px,1px); }
-  75% { transform: translate(-2px,0); }
+  0%,100% { transform: translate3d(0,0,0) rotateZ(0); }
+  15% { transform: translate3d(-5px,3px,8px) rotateZ(-1deg); }
+  30% { transform: translate3d(5px,-3px,0) rotateZ(1deg); }
+  45% { transform: translate3d(-4px,-2px,6px) rotateZ(-.6deg); }
+  60% { transform: translate3d(4px,2px,0) rotateZ(.6deg); }
+  75% { transform: translate3d(-2px,0,0) rotateZ(0); }
 }
 .overlay-card.oc-boss {
   border-color: #c9873a;
@@ -684,6 +685,48 @@ body[data-weather="freeze"] #blizzard { opacity: .18; animation-duration: 3s; }
 .oc-attack .ov-title { color: #f0b0a0; }
 .oc-boss .ov-title { color: #f4c07a; font-size: 24px; }
 .ov-emoji { font-size: 44px; text-align: center; margin: 6px 0 12px; }
+
+/* ---------- ケモノ出現演出（3D） ---------- */
+.ov-beast {
+  position: relative;
+  height: 108px;
+  margin: 2px 0 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  perspective: 500px;
+}
+.ov-beast .beast-emoji {
+  display: inline-block;
+  font-size: 64px;
+  transform-style: preserve-3d;
+  filter: drop-shadow(0 10px 16px rgba(0,0,0,.6));
+  animation: beastCharge .85s cubic-bezier(.22,.85,.3,1) both;
+}
+@keyframes beastCharge {
+  0%   { transform: translateZ(-280px) translateY(14px) rotateY(28deg) rotateX(10deg) scale(.25); opacity: 0; filter: blur(7px) drop-shadow(0 0 0 rgba(0,0,0,0)); }
+  55%  { transform: translateZ(36px) translateY(-5px) rotateY(-10deg) rotateX(-5deg) scale(1.24); opacity: 1; filter: blur(0) drop-shadow(0 14px 20px rgba(0,0,0,.65)); }
+  78%  { transform: translateZ(0) translateY(0) rotateY(5deg) rotateX(2deg) scale(.93); }
+  100% { transform: translateZ(0) translateY(0) rotateY(0) rotateX(0) scale(1); }
+}
+.ov-beast .claw {
+  position: absolute;
+  top: 50%; left: 50%;
+  width: 150%; height: 5px;
+  border-radius: 3px;
+  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,.92) 20%, rgba(255,255,255,.92) 80%, transparent 100%);
+  transform: translate(-50%, -50%);
+  scale: .05 1;
+  opacity: 0;
+  animation: clawSlash .4s cubic-bezier(.2,.9,.3,1) .48s both;
+  pointer-events: none;
+}
+@keyframes clawSlash {
+  0%   { opacity: 0; scale: .05 1; }
+  35%  { opacity: 1; }
+  100% { opacity: 0; scale: 1.5 1; }
+}
+.oc-boss .ov-beast .beast-emoji { animation: beastCharge .85s cubic-bezier(.22,.85,.3,1) both, bossLoom 2.2s ease-in-out .9s infinite; }
 .ov-body {
   font-size: 13.5px;
   color: var(--ink-dim);
@@ -772,6 +815,9 @@ body[data-weather="freeze"] #blizzard { opacity: .18; animation-duration: 3s; }
   .overlay-card.oc-attack { animation: rise .3s ease; }
   .overlay-card.oc-boss { animation: rise .3s ease; }
   .oc-boss .ov-emoji { animation: none; }
+  .ov-beast .beast-emoji,
+  .oc-boss .ov-beast .beast-emoji { animation: none; opacity: 1; transform: none; filter: drop-shadow(0 10px 16px rgba(0,0,0,.6)); }
+  .ov-beast .claw { animation: none; opacity: 0; }
   .bar.b-danger { animation: none; }
   .end-day-btn:not(:disabled) { animation: none; }
   .day-info.day-bump,
