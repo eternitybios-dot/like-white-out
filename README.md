@@ -5,7 +5,10 @@
 ## 遊び方
 
 スマホブラウザ（iPhone Safari / Android Chrome）で `index.html` を開くだけで遊べます。
-GitHub Pages を有効にすれば、そのまま公開できます。
+
+▶ **https://eternitybios-dot.github.io/like-white-out/**
+
+（GitHub Pages でこのURLを公開する場合は、リポジトリの Settings → Pages でソースブランチを指定してください）
 
 - **昼**：村人を仕事に配置し、施設を建設・強化する
 - **夕方**：山を探索するか、防衛準備をするか、休むかを選ぶ
