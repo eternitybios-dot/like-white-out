@@ -139,6 +139,14 @@ function defaultState() {
 /* ---------- ユーティリティ ---------- */
 
 const $ = sel => document.querySelector(sel);
+
+/** クラスを一度外して強制リフローしてから付け直す。同じクラス名でもアニメーションを再生させる。 */
+function bumpEl(el, cls) {
+  if (!el) return;
+  el.classList.remove(cls);
+  void el.offsetWidth;
+  el.classList.add(cls);
+}
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const rnd = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
 const chance = p => Math.random() < p;
@@ -227,8 +235,13 @@ function threatStage(v) {
   return st;
 }
 
+let prevDay = null;
+
 function renderTop() {
   $("#dayInfo").textContent = `第${S.day}日`;
+  if (prevDay !== null && prevDay !== S.day) bumpEl($("#dayInfo"), "day-bump");
+  prevDay = S.day;
+
   const timeMap = { day: "☀ 昼", evening: "🌆 夕方", night: "🌙 夜" };
   $("#timeInfo").textContent = timeMap[S.time] || "☀ 昼";
   const w = WEATHERS[S.weather];
@@ -236,6 +249,7 @@ function renderTop() {
   wEl.textContent = `${w.icon} ${w.name}`;
   wEl.className = `weather-info ${w.cls}`;
   document.body.dataset.time = S.time;
+  document.body.dataset.weather = S.weather;
 
   const st = threatStage(S.threat);
   const banner = $("#threatBanner");
@@ -247,6 +261,8 @@ function renderTop() {
   $("#threatText").textContent = txt;
 }
 
+let prevResources = null;
+
 function renderResources() {
   const r = S.resources;
   const map = { wood: r.wood, food: r.food, herb: r.herb, fur: r.fur, iron: r.iron };
@@ -256,7 +272,13 @@ function renderResources() {
     el.textContent = Math.floor(v);
     const parent = el.closest(".res");
     parent.classList.toggle("res-low", (k === "food" && v < S.villagers) || (k === "wood" && v < 6));
+    if (prevResources) {
+      const diff = Math.floor(v) - Math.floor(prevResources[k]);
+      if (diff > 0) bumpEl(parent, "res-bump");
+      else if (diff < 0) bumpEl(parent, "res-drop");
+    }
   }
+  prevResources = { ...map };
 }
 
 function bar(value, max, cls) {
@@ -327,6 +349,8 @@ function payCost(cost) {
   for (const [k, v] of Object.entries(cost)) S.resources[k] -= v;
 }
 
+let justBuiltId = null;
+
 function renderBuild() {
   const el = $("#screen-build");
   el.innerHTML = BUILD_DEFS.map(b => {
@@ -335,7 +359,7 @@ function renderBuild() {
     const cost = maxed ? null : b.cost(lv);
     const affordable = cost && canPay(cost);
     return `
-      <div class="bcard">
+      <div class="bcard ${b.id === justBuiltId ? "just-built" : ""}">
         <div class="b-icon">${b.icon}</div>
         <div class="b-main">
           <div><span class="b-name">${b.name}</span><span class="b-lv">${lv > 0 ? `Lv${lv}` : "未建設"}</span></div>
@@ -348,7 +372,10 @@ function renderBuild() {
         </button>
       </div>`;
   }).join("");
+  justBuiltId = null;
 }
+
+let prevJobs = null;
 
 function renderJobs() {
   const el = $("#screen-jobs");
@@ -373,11 +400,19 @@ function renderJobs() {
         </div>
         <div class="j-ctrl">
           <button class="jbtn" data-job="${j.id}" data-d="-1" ${n === 0 ? "disabled" : ""}>−</button>
-          <span class="j-count">${n}</span>
+          <span class="j-count" data-jc="${j.id}">${n}</span>
           <button class="jbtn" data-job="${j.id}" data-d="1" ${free === 0 || locked ? "disabled" : ""}>＋</button>
         </div>
       </div>`;
     }).join("")}`;
+  if (prevJobs) {
+    for (const j of JOB_DEFS) {
+      if (S.jobs[j.id] !== prevJobs[j.id]) {
+        bumpEl(el.querySelector(`.j-count[data-jc="${j.id}"]`), "bump");
+      }
+    }
+  }
+  prevJobs = { ...S.jobs };
 }
 
 function renderExplore() {
@@ -512,6 +547,8 @@ function showOverlay(html, cls) {
   busy = true;
   const ov = $("#overlay");
   const card = $("#overlayCard");
+  card.className = "";
+  void card.offsetWidth; // 強制リフローで、連続ページでも入場アニメーションを毎回再生させる
   card.className = `overlay-card ${cls || ""}`;
   card.innerHTML = html;
   ov.classList.remove("hidden");
@@ -566,6 +603,7 @@ function doBuild(id) {
   payCost(cost);
   S.buildings[id] = lv + 1;
   addLog(`${def.name}を${lv === 0 ? "建てた" : `Lv${lv + 1}に強化した`}。`, "good");
+  justBuiltId = id;
   save();
   renderAll();
 }

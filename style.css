@@ -85,6 +85,22 @@ button {
 body[data-time="evening"] #nightTint { opacity: .3; }
 body[data-time="night"]   #nightTint { opacity: .75; }
 
+/* ---------- 吹雪演出 ---------- */
+#blizzard {
+  position: fixed; inset: 0;
+  pointer-events: none;
+  z-index: 6;
+  opacity: 0;
+  background: repeating-linear-gradient(112deg, rgba(223,233,245,.09) 0 2px, transparent 2px 16px);
+  transition: opacity 1s ease;
+  animation: blizzardMove 1s linear infinite;
+}
+body[data-weather="storm"] #blizzard { opacity: .6; }
+body[data-weather="freeze"] #blizzard { opacity: .18; animation-duration: 3s; }
+@keyframes blizzardMove {
+  from { background-position: 0 0; }
+  to   { background-position: -260px 200px; }
+}
 /* ---------- レイアウト ---------- */
 #app {
   max-width: 520px;
@@ -116,6 +132,13 @@ body[data-time="night"]   #nightTint { opacity: .75; }
   font-weight: 700;
   letter-spacing: .06em;
   color: var(--snow);
+  display: inline-block;
+}
+.day-info.day-bump { animation: dayBump .6s ease; }
+@keyframes dayBump {
+  0%   { transform: scale(1) translateY(0); }
+  35%  { transform: scale(1.16) translateY(-2px); color: var(--ember); }
+  100% { transform: scale(1) translateY(0); }
 }
 .time-info { font-size: 13px; color: var(--ink-dim); }
 .weather-info {
@@ -155,6 +178,14 @@ body[data-time="night"]   #nightTint { opacity: .75; }
   60% { transform: translateX(-1px); }
   80% { transform: translateX(1px); }
 }
+.threat-banner.t-high #threatIcon {
+  display: inline-block;
+  animation: pawBounce 1s ease-in-out infinite;
+}
+@keyframes pawBounce {
+  0%, 100% { transform: translateY(0) rotate(0); }
+  50%      { transform: translateY(-2px) rotate(-8deg); }
+}
 
 /* ---------- 資源バー ---------- */
 #resbar {
@@ -187,9 +218,14 @@ body[data-time="night"]   #nightTint { opacity: .75; }
 .res-icon { font-size: 13px; }
 .res.res-low span:last-child { color: var(--danger); font-weight: 700; }
 .res.res-bump { animation: bump .4s ease; }
+.res.res-drop { animation: bumpDown .4s ease; }
 @keyframes bump {
-  30% { transform: scale(1.12); }
+  30% { transform: scale(1.12); color: var(--ok); }
 }
+@keyframes bumpDown {
+  30% { transform: scale(.92); color: var(--danger); }
+}
+.j-count.bump { animation: bump .35s ease; }
 
 /* ---------- メイン画面 ---------- */
 #screens {
@@ -210,7 +246,12 @@ body[data-time="night"]   #nightTint { opacity: .75; }
   padding: 12px 14px;
   margin-bottom: 10px;
   box-shadow: 0 2px 8px rgba(0,0,0,.25);
+  animation: fadein .3s ease both;
 }
+.screen.active .panel:nth-of-type(1) { animation-delay: .02s; }
+.screen.active .panel:nth-of-type(2) { animation-delay: .07s; }
+.screen.active .panel:nth-of-type(3) { animation-delay: .12s; }
+.screen.active .panel:nth-of-type(4) { animation-delay: .17s; }
 .panel h3 {
   font-family: var(--serif);
   font-size: 15px;
@@ -264,6 +305,11 @@ body[data-time="night"]   #nightTint { opacity: .75; }
 .bar.b-danger > i { background: linear-gradient(90deg, #9c3535, var(--danger)); }
 .bar.b-threat > i { background: linear-gradient(90deg, #7a3535, #d06060); }
 .bar.b-cold > i { background: linear-gradient(90deg, #3d6396, #9fc4ee); }
+.bar.b-danger { animation: dangerPulse 1.6s ease-in-out infinite; border-radius: 4px; }
+@keyframes dangerPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(224,85,85,0); }
+  50%      { box-shadow: 0 0 7px 1px rgba(224,85,85,.55); }
+}
 
 /* 村の一言 */
 .village-flavor {
@@ -298,6 +344,16 @@ body[data-time="night"]   #nightTint { opacity: .75; }
   border-radius: 12px;
   padding: 11px 12px;
   margin-bottom: 8px;
+}
+.bcard.just-built { animation: buildFlash 1.1s ease; }
+@keyframes buildFlash {
+  0%   { box-shadow: 0 0 0 0 rgba(232,162,75,.65); border-color: var(--ember); }
+  55%  { box-shadow: 0 0 0 9px rgba(232,162,75,0); border-color: var(--ember); }
+  100% { box-shadow: 0 0 0 0 rgba(232,162,75,0); }
+}
+.bcard.just-built .b-icon { animation: buildIconPop .5s ease; }
+@keyframes buildIconPop {
+  40% { transform: scale(1.25) rotate(-4deg); }
 }
 .bcard .b-icon {
   font-size: 26px;
@@ -478,7 +534,12 @@ body[data-time="night"]   #nightTint { opacity: .75; }
   box-shadow: 0 4px 16px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.12);
   transition: transform .08s ease;
 }
-.end-day-btn:active { transform: scale(.97); }
+.end-day-btn:not(:disabled) { animation: breathe 2.6s ease-in-out infinite; }
+@keyframes breathe {
+  0%, 100% { box-shadow: 0 4px 16px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.12), 0 0 0 0 rgba(74,118,180,0); }
+  50%      { box-shadow: 0 4px 20px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.12), 0 0 16px 2px rgba(74,118,180,.5); }
+}
+.end-day-btn:active { transform: scale(.97); animation: none; }
 .end-day-btn:disabled { opacity: .4; }
 
 /* ---------- タブバー ---------- */
@@ -591,6 +652,16 @@ body[data-time="night"]   #nightTint { opacity: .75; }
   background:
     radial-gradient(ellipse 90% 40% at 50% 0%, rgba(200,90,40,.22), transparent),
     linear-gradient(180deg, #2c1d16, #140d12);
+  animation: rise .3s ease, quake .6s ease .2s, emberGlow 2.8s ease-in-out .8s infinite;
+}
+@keyframes emberGlow {
+  0%, 100% { box-shadow: 0 10px 40px rgba(0,0,0,.6), 0 0 0 rgba(201,135,58,0); }
+  50%      { box-shadow: 0 10px 40px rgba(0,0,0,.6), 0 0 32px rgba(201,135,58,.4); }
+}
+.oc-boss .ov-emoji { animation: bossLoom 2.2s ease-in-out infinite; }
+@keyframes bossLoom {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.08); }
 }
 .overlay-card.oc-good { border-color: #3f7a4c; }
 
@@ -695,6 +766,16 @@ body[data-time="night"]   #nightTint { opacity: .75; }
 /* モーション低減設定 */
 @media (prefers-reduced-motion: reduce) {
   .flake { display: none; }
-  .threat-banner.t-high { animation: none; }
+  #blizzard { animation: none; opacity: 0 !important; }
+  .threat-banner.t-high,
+  .threat-banner.t-high #threatIcon { animation: none; }
   .overlay-card.oc-attack { animation: rise .3s ease; }
+  .overlay-card.oc-boss { animation: rise .3s ease; }
+  .oc-boss .ov-emoji { animation: none; }
+  .bar.b-danger { animation: none; }
+  .end-day-btn:not(:disabled) { animation: none; }
+  .day-info.day-bump,
+  .res.res-bump, .res.res-drop, .j-count.bump,
+  .bcard.just-built, .bcard.just-built .b-icon,
+  .panel { animation: none; }
 }
